@@ -195,14 +195,17 @@ async def replan_check_node(state: AgentState, deps: SupervisorDeps) -> dict:
     if has_runbook or rounds >= 1:
         verdict = {"type": "ReplanCheck", "round": rounds, "is_sufficient": True}
         return {"events": state["events"] + [verdict]}
-    incident_type = _classify_incident_type(state.get("collected", []))
+    mon = [c["data"] for c in state.get("collected", []) if c["source"] == "monitoring"]
+    lines = [f"{d['system_name']} 상태: {d['status']} 알림: {', '.join(d['alerts'])}" for d in mon]
+    monitoring_text = "\n".join(lines)
+    text = f"{state['query']} \n{monitoring_text}"
+    incident_type, score = deps.retriever.classify(text)
     gap_task = {"id": "task-gap-runbook", "agent": "research", "kind": "runbook",
                 "target": incident_type, "status": "pending"}
     verdict = {"type": "ReplanCheck", "round": rounds, "is_sufficient": False,
-               "gap_task": gap_task["id"], "target": incident_type}
+               "gap_task": gap_task["id"], "target": incident_type, "score": round(score, 3)}
     return {"tasks": state["tasks"] + [gap_task], "replan_rounds": rounds + 1,
             "events": state["events"] + [verdict]}
-
 
 @traceable(name="analysis_node")
 async def analysis_node(state: AgentState, deps: SupervisorDeps) -> dict:
@@ -283,7 +286,7 @@ def _after_validate(state: AgentState) -> str:
 
 def build_graph(deps: SupervisorDeps):
     g = StateGraph(AgentState)
-    node = lambda fn: partial(fn, deps=deps)   # Wave 13 — 명시적 의존성 주입
+    node = lambda fn: partial(fn, deps=deps) # Wave 13 — 명시적 의존성 주입
     g.add_node("route", node(route_node))
     g.add_node("chat_answer", node(chat_answer_node))
     g.add_node("plan", node(plan_node))
