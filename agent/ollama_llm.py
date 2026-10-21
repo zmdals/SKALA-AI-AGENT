@@ -12,10 +12,10 @@ fc
 """
 import json
 import re
-from pathlib import Path
-from .systems import KNOWN_SYSTEMS,extract_system_name,guess_targets
 import httpx
 from langsmith import traceable
+
+from .systems import KNOWN_SYSTEMS,extract_system_name,guess_targets
 
 OLLAMA_URL = "http://127.0.0.1:11434/api/chat"
 

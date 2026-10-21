@@ -21,10 +21,10 @@ OpenAI 계정에 실제 비용이 청구된다(run_openai.sh 실행 전 반드�
 import json
 import os
 import re
-from pathlib import Path
-from .systems import KNOWN_SYSTEMS,extract_system_name,guess_targets
 import httpx
 from langsmith import traceable
+
+from .systems import KNOWN_SYSTEMS,extract_system_name,guess_targets
 
 OPENAI_URL = "https://api.openai.com/v1/chat/completions"
 
