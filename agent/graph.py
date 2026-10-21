@@ -10,6 +10,7 @@ incident: plan(MCP Prompt 절차 반영) → gate(권위 게이트) → research
 """
 import asyncio
 import time
+import re
 from functools import partial
 from typing import Any, TypedDict
 
@@ -19,7 +20,7 @@ from langsmith import traceable
 
 from .deps import SupervisorDeps
 from .retry import with_retry
-from .systems import extract_system_name
+from .systems import KNOWN_SYSTEMS,extract_system_name
 
 class AgentState(TypedDict, total=False):
     query: str
@@ -40,6 +41,7 @@ class AgentState(TypedDict, total=False):
     last_prompt: str
     cost_usd: float
     events: list[dict]
+    clarify_reason: str # "" | "no_system" | "unknown_system"
 
 
 def _cost(state: AgentState, usage: dict) -> float:
@@ -55,6 +57,37 @@ async def route_node(state: AgentState, deps: SupervisorDeps) -> dict:
             "cost_usd": _cost(state, usage),
             "events": state.get("events", []) + [event]}
 
+# "xxx-service" 또는 "web-01" 같은 서버 이름 모양 체크
+SYSTEM_NAME_PATTERN = re.compile(r"[a-z][a-z0-9-]*-(?:service|\d+)")
+
+@traceable(name="system_check_node")
+async def system_check_node(state:AgentState, deps: SupervisorDeps) -> dict:
+    query = state["query"]
+    known = [s for s in KNOWN_SYSTEMS if s in query]
+    unknown = [n for n in SYSTEM_NAME_PATTERN.findall(query) if n not in KNOWN_SYSTEMS]
+    if unknown:
+        reason = "unknown_system"
+    elif not known:
+        reason = "no_system"
+    else:
+        reason = ""
+    event = {"type": "SystemCheck", "known": known, "unknown": unknown, "reason": reason}
+    return {"clarify_reason": reason, "events": state["events"] + [event]}
+
+# 되묻는 메세지 만들기
+@traceable(name="clarify_node")
+async def clarify_node(state:AgentState, deps: SupervisorDeps) -> dict:
+    systems = ", ".join(sorted(KNOWN_SYSTEMS))
+    event = {"type": "Clarify", "reason": state["clarify_reason"]}
+    if state["clarify_reason"] == "unknown_system":
+        names = ", ".join(state["events"][-1]["unknown"])
+        reply = f"'{names}'는 모니터링 대상이 아닌 서버예요. 확인할 수 있는 서버: {systems}"
+    else:
+        candidate, score = deps.system_matcher.classify(state["query"])
+        event.update({"candidate":candidate, "score": round(score,3)})
+        reply = (f"어느 서버에서 발생한 문제인가요? 말씀하신 내용으로는 '{candidate}'일 가능성이 높아요. "
+                f"서버 이름을 함께 알려주세요. (확인할 수 있는 서버: {systems})")
+    return {"final": reply, "events": state["events"] + [event]}
 
 @traceable(name="chat_answer_node")
 async def chat_answer_node(state: AgentState, deps: SupervisorDeps) -> dict:
@@ -284,8 +317,10 @@ async def finalize_node(state: AgentState, deps: SupervisorDeps) -> dict:
 
 
 def _after_route(state: AgentState) -> str:
-    return "chat_answer" if state["route"] == "chat" else "plan"
+    return "chat_answer" if state["route"] == "chat" else "system_check"
 
+def _after_system_check(state: AgentState) -> str:
+    return "clarify" if state["clarify_reason"] else "plan"
 
 def _after_replan_check(state: AgentState) -> str:
     last = state["events"][-1]
@@ -301,6 +336,8 @@ def build_graph(deps: SupervisorDeps):
     node = lambda fn: partial(fn, deps=deps) # Wave 13 — 명시적 의존성 주입
     g.add_node("route", node(route_node))
     g.add_node("chat_answer", node(chat_answer_node))
+    g.add_node("system_check", node(system_check_node))
+    g.add_node("clarify", node(clarify_node))
     g.add_node("plan", node(plan_node))
     g.add_node("gate", node(gate_node))
     g.add_node("research", node(research_node))
@@ -312,7 +349,10 @@ def build_graph(deps: SupervisorDeps):
 
     g.set_entry_point("route")
     g.add_conditional_edges("route", _after_route,
-                            {"chat_answer": "chat_answer", "plan": "plan"})
+                            {"chat_answer": "chat_answer", "system_check": "system_check"})
+    g.add_conditional_edges("system_check",_after_system_check,
+                            {"clarify":"clarify", "plan":"plan"})
+    g.add_edge("clarify", END)
     g.add_edge("chat_answer", END)
     g.add_edge("plan", "gate")
     g.add_edge("gate", "research")

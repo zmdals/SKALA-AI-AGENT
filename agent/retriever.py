@@ -65,7 +65,6 @@ class RunbookRetriever(EmbeddingIndex):
                 for p in paths}
         super().__init__(docs)
 
-
 def build_system_matcher(path: Path = SYSTEM_DESC_PATH) -> EmbeddingIndex:
     """서버 설명으로 만든 EmbeddingIndex — 서버 이름이 없는 질문에서 후보를 추천할 때 쓴다."""
     return EmbeddingIndex(json.loads(path.read_text(encoding="utf-8")))

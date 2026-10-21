@@ -15,5 +15,5 @@ class SupervisorDeps:
     mcp: Any             # Wave 2  — MCP stdio 클라이언트 (Tool/Resource/Prompt)
     session_store: Any   # Wave 12 — SQLite 세션 저장소
     version: str         # Wave 14 — SUPERVISOR_VERSION (v1/v2)
-    retriever: Any
-    system_matcher: Any
+    retriever: Any       # runbook 분류기
+    system_matcher: Any  # 서버 추천기 
