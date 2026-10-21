@@ -196,15 +196,27 @@ async def replan_check_node(state: AgentState, deps: SupervisorDeps) -> dict:
         verdict = {"type": "ReplanCheck", "round": rounds, "is_sufficient": True}
         return {"events": state["events"] + [verdict]}
     mon = [c["data"] for c in state.get("collected", []) if c["source"] == "monitoring"]
-    lines = [f"{d['system_name']} 상태: {d['status']} 알림: {', '.join(d['alerts'])}" for d in mon]
-    monitoring_text = "\n".join(lines)
-    text = f"{state['query']} \n{monitoring_text}"
-    incident_type, score = deps.retriever.classify(text)
-    gap_task = {"id": "task-gap-runbook", "agent": "research", "kind": "runbook",
-                "target": incident_type, "status": "pending"}
+
+    incident_types = [] # 순서유지 + 중복 없이
+    scores = {}
+    for d in mon:
+        if d["alerts"]: # 이 서버에 알림 있으면
+            text = f"{d['system_name']} 상태: {d['status']}\n알림: {','.join(d['alerts'])}" # 그 서버 데이터
+        else:
+            text = state["query"]
+        incident_type, score = deps.retriever.classify(text)
+        scores[d["system_name"]] = round(score, 3)               
+        if incident_type not in incident_types:                 
+            incident_types.append(incident_type)
+    
+    gap_tasks = [{"id": f"task-gap-runbook-{i}", "agent": "research", "kind": "runbook",
+                  "target": t, "status": "pending"}
+                 for i, t in enumerate(incident_types)]
     verdict = {"type": "ReplanCheck", "round": rounds, "is_sufficient": False,
-               "gap_task": gap_task["id"], "target": incident_type, "score": round(score, 3)}
-    return {"tasks": state["tasks"] + [gap_task], "replan_rounds": rounds + 1,
+               "gap_tasks": [g["id"] for g in gap_tasks],
+               "target": ", ".join(incident_types),
+               "scores": scores}
+    return {"tasks": state["tasks"] + gap_tasks, "replan_rounds": rounds + 1,
             "events": state["events"] + [verdict]}
 
 @traceable(name="analysis_node")
