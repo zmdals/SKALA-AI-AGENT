@@ -2,7 +2,7 @@
   "cpu-spike": "CPU 사용률 급증·과부하. CPU 사용률이 임계치(80~90%)를 넘고 처리량 대비 CPU가 치솟음. high CPU usage, CPU spike, CPU threshold exceeded",
   "db-down": "데이터베이스 다운·접속 불가. DB 연결 거부, 쿼리 실패, 리플리케이션 중단으로 failover가 필요한 상황. database down, connection refused, replication failure",
   "disk-full": "디스크 공간 부족. 디스크 사용률이 90% 이상이거나 로그·임시 파일이 쌓여 볼륨이 가득 참. disk full, low disk space, no space left on device",
-  "high-latency": "응답 지연·느린 응답. p95/p99 지연시간이 임계치를 넘거나 커넥션 풀이 고갈되어 요청이 대기함. high latency, slow response, connection pool exhausted",
+  "high-latency": "응답 지연·느린 응답. p95/p99 지연시간이 임계치를 넘거나 커넥션 풀이 고갈되어 요청이 대기함. high latency, slow response, connection pool exhausted, p95/p99 latency above threshold, connection pool usage high",
   "memory-leak": "메모리 누수. 메모리 사용률이 시간에 따라 꾸준히 증가하고 힙(heap)이 한계에 가까워 OOM 위험이 있음. memory usage increasing, heap exhaustion, out of memory",
   "network-timeout": "서비스 간 네트워크 타임아웃. 다른 서비스(업스트림) 호출이 시간 초과(504)되거나 패킷 손실로 연결이 불안정함. request timeout, gateway timeout, packet loss"
 }
