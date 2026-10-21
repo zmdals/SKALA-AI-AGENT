@@ -35,10 +35,10 @@ for item in labels:
     print(res)
     results.append(res)
 
-with open(f"{RUN_NAME}.json", "w", encoding="utf-8") as f:
+with open(f"eval/{RUN_NAME}.json", "w", encoding="utf-8") as f:
     json.dump(results, f, ensure_ascii=False, indent=4)
 
 correct = sum(r["correct"] for r in results)
 avg_elapsed_s = round(sum(r["elapsed_s"] for r in results) / len(results),1)
-total_cost_usd = sum(r["cost_usd"] for r in results)
+total_cost_usd = round(sum(r["cost_usd"] for r in results),3)
 print(f"정확도: {correct} / {len(results)}, 평균 응답 시간: {avg_elapsed_s}s, 총 비용: ${total_cost_usd}")

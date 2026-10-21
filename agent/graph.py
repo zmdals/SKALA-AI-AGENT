@@ -11,6 +11,7 @@ incident: plan(MCP Prompt 절차 반영) → gate(권위 게이트) → research
 import asyncio
 import json
 import time
+from .systems import extract_system_name
 from functools import partial
 from pathlib import Path
 from typing import Any, TypedDict
@@ -21,31 +22,6 @@ from langsmith import traceable
 
 from .deps import SupervisorDeps
 from .retry import with_retry
-
-
-def _load_known_systems() -> set[str]:
-    """ollama_llm.py/openai_llm.py와 동일한 소스(data/monitoring.json)에서
-    시스템 목록을 읽는다 — plan_node가 MCP Prompt에 넘길 system_name을
-    쿼리에서 멤버십 매칭으로 뽑아낼 때 쓴다."""
-    path = Path(__file__).resolve().parent.parent / "data" / "monitoring.json"
-    try:
-        return set(json.loads(path.read_text()).keys())
-    except (OSError, json.JSONDecodeError):
-        return {"auth-service", "web-01"}
-
-
-KNOWN_SYSTEMS = _load_known_systems()
-
-
-def _extract_system_name(query: str) -> str: 
-    """정규식 대신 실제 KNOWN_SYSTEMS 멤버십 매칭 — MCP Prompt(incident_analysis_
-    prompt)의 system_name은 "시스템: X" 한 줄짜리 컨텍스트라 항상 정해진 이름
-    중 하나로만 고정한다(여러 개 언급돼도 join하지 않음 — 실제 조사 대상 목록은
-    이후 plan()의 tasks가 별도로 결정). 쿼리에서 가장 먼저 등장하는 시스템을
-    고르고, 하나도 안 걸리면 가장 흔한 사례인 auth-service로 폴백."""
-    matches = [(query.index(s), s) for s in KNOWN_SYSTEMS if s in query]
-    return min(matches)[1] if matches else "auth-service"
-
 
 class AgentState(TypedDict, total=False):
     query: str
@@ -107,7 +83,7 @@ async def plan_node(state: AgentState, deps: SupervisorDeps) -> dict:
     prompt_server = await deps.mcp.find_prompt("incident_analysis_prompt")
     procedure = await deps.mcp.get_prompt(
         "incident_analysis_prompt",
-        {"system_name": _extract_system_name(state["query"]), "symptom": state["query"]},
+        {"system_name": extract_system_name(state["query"]), "symptom": state["query"]},
         server=prompt_server,
     )
     result, usage = deps.fast_llm.plan(state["query"], procedure)
