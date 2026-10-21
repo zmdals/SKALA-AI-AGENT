@@ -16,3 +16,4 @@ class SupervisorDeps:
     session_store: Any   # Wave 12 — SQLite 세션 저장소
     version: str         # Wave 14 — SUPERVISOR_VERSION (v1/v2)
     retriever: Any
+    system_matcher: Any

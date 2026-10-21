@@ -1,0 +1,8 @@
+{
+  "auth-service": "로그인·인증 서버. 사용자 로그인, 회원 인증, 세션과 토큰 발급을 담당. login, authentication, session",
+  "payments-service": "결제 서버. 주문 결제 승인, 카드 결제, 환불 처리를 담당. payment, checkout, billing transaction",
+  "cache-service": "캐시 서버. 자주 조회하는 데이터를 메모리에 저장해 다른 서비스의 응답 속도를 높임. cache, in-memory store",
+  "gateway-service": "API 게이트웨이. 외부 요청을 받아 내부 서비스로 라우팅하고 전달함. API gateway, routing, proxy",
+  "log-service": "로그 수집·저장 서버. 각 서비스의 로그를 모아 디스크에 저장함. logging, log collection",
+  "web-01": "웹 서버 1호기. 사용자에게 웹 페이지(프론트엔드)를 제공함. web server, frontend"
+}

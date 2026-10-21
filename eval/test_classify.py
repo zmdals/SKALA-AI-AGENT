@@ -24,7 +24,7 @@ for item in labels:
     for system in guess_targets(item["query"]):     # 질문에 나온 서버 전부
         info = monitoring[system]
         if info["alerts"]:                          # 그 서버에 알림이 있으면
-            text = f"{system} 상태: {info['status']}\n알림: {', '.join(info['alerts'])}"
+            text = f"{system} 상태: {info['status']}\n알림: {','.join(info['alerts'])}"
         else:                                       # 알림이 없으면 (healthy)
             text = item["query"]
         incident_type, score = retriever.classify(text)

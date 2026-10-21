@@ -8,7 +8,7 @@ LABELS_PATH = Path(__file__).parent/"labels.json"
 with open(LABELS_PATH, encoding="utf-8") as f:
     labels = json.load(f)
 URL = "http://127.0.0.1:8100/chat"
-RUN_NAME = "after_rag"
+RUN_NAME = "after_system"
 results = []
 for item in labels:
     print(f"{item['id']}: {item['query']}")
