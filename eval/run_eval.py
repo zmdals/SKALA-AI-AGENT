@@ -1,5 +1,4 @@
 from pathlib import Path
-from collections import Counter
 import json
 import httpx
 import time
@@ -8,25 +7,41 @@ LABELS_PATH = Path(__file__).parent/"labels.json"
 with open(LABELS_PATH, encoding="utf-8") as f:
     labels = json.load(f)
 URL = "http://127.0.0.1:8100/chat"
-RUN_NAME = "after_system"
+RUN_NAME = "after_clarify"
 results = []
 for item in labels:
-    print(f"{item['id']}: {item['query']}")
+    print(f"id:{item['id']}, query:{item['query']}, expected:{item['expected']}")
     start_time = time.perf_counter()
     data = httpx.post(URL, json={"message":item['query'], "thread_id":f"{RUN_NAME}-{item['id']}"}, timeout=300).json()
     end_time = time.perf_counter()
-    targets = [e["target"] for e in data["events"] if e.get("type") == "TaskCompleted" and e["source"] == "runbook"]
+
+    targets = [e["target"] for e in data["events"]
+               if e.get("type") == "TaskCompleted" and e["source"] == "runbook"]
+
+    # 1. 되묻기 이벤트 찾기
+    clarify = [e for e in data["events"] if e.get("type") == "Clarify"]
+
+    # 2. actual 정하기
+    if clarify:                                   # 되묻기를 했으면
+        if clarify[0]["reason"] == "no_system":
+            actual = "CLARIFY"
+        else:
+            actual = "UNKNOWN_SYSTEM"
+    else:                                         # 되묻기를 안 했으면
+        actual = targets
+
+    # 3. 정답 판정
+    if isinstance(item["expected"], str):         # 정답이 "CLARIFY" / "UNKNOWN_SYSTEM"
+        correct = actual == item["expected"]      # 되묻기 종류까지 정확히 같아야 정답
+    else:                                         # 정답이 runbook 리스트
+        correct = isinstance(actual, list) and set(actual) == set(item["expected"])
     cost_usd = data["metadata"]["cost_usd"]
     time_elapsed = round(end_time - start_time,1)
-
-    correct = False
-    if isinstance(item["expected"],list) and set(item["expected"]) == set(targets):
-        correct = True
 
     res = {"id":item["id"], 
            "query":item["query"], 
            "expected":item["expected"], 
-           "actual":targets,
+           "actual":actual,
            "correct":correct,
            "elapsed_s":time_elapsed,
            "cost_usd":cost_usd,
