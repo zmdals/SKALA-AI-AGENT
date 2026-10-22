@@ -7,10 +7,10 @@ LABELS_PATH = Path(__file__).parent/"labels.json"
 with open(LABELS_PATH, encoding="utf-8") as f:
     labels = json.load(f)
 URL = "http://127.0.0.1:8100/chat"
-RUN_NAME = "after_clarify"
+RUN_NAME = "after_multiturn"
 results = []
 for item in labels:
-    print(f"id:{item['id']}, query:{item['query']}, expected:{item['expected']}")
+    print(f"id:{item['id']}, query:{item['query']}, expected:{item['expected']}\n")
     start_time = time.perf_counter()
     data = httpx.post(URL, json={"message":item['query'], "thread_id":f"{RUN_NAME}-{item['id']}"}, timeout=300).json()
     end_time = time.perf_counter()

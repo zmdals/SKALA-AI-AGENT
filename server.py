@@ -124,19 +124,32 @@ def _metadata(result: dict, run_id: str | None) -> dict:
         "langsmith_run_id": run_id,
     }
 
+CLARIFY_ROLE = "clarify" # 되묻기 답변은 이 role로 저장 → DB 테이블 변경 없이 표시
+
+def _resolve_query(history: list[dict], message:str) -> str:
+    """직전 답변이 되묻기였으면, 원래 질문 + 지금 답을 합쳐서 이어받는다."""
+    if len(history) >= 2 and history[-1]["role"] == CLARIFY_ROLE:
+        original = history[-2]["content"] # 되묻기 직전의 사용자 질문
+        return f"{original}\n(추가 정보: {message})"
+    return message
+
+def _save_turn(deps, thread_id: str, message: str, final:str, clarified:bool) -> None:
+    deps.session_store.append(thread_id, "user", message)
+    deps.session_store.append(thread_id, CLARIFY_ROLE if clarified else "assistant", final)
 
 @traceable(name="chat_request")
 async def _handle_chat(message: str, thread_id: str) -> tuple[dict, str | None]:
     deps = app.state.deps
     history = deps.session_store.load(thread_id)   # Wave 12
+    query = _resolve_query(history, message)
+    resumed = [{"type": "ClarifyResumed", "query": query}] if query != message else []
     if deps.version == "v2":
         result = await app.state.graph.ainvoke(
-            {"query": message, "thread_id": thread_id, "history": history,
-             "events": [], "cost_usd": 0.0})
+            {"query": query, "thread_id": thread_id, "history": history,
+             "events": resumed, "cost_usd": 0.0})
     else:
-        result = await run_v1(deps, message, thread_id, history)   # Wave 14
-    deps.session_store.append(thread_id, "user", message)
-    deps.session_store.append(thread_id, "assistant", result["final"])
+        result = await run_v1(deps, query, thread_id, history)   # Wave 14
+    _save_turn(deps, thread_id, message, result["final"], bool(result.get("clarify_reason")))
     rt = get_current_run_tree()
     return result, (str(rt.id) if rt else None)
 
@@ -159,6 +172,8 @@ async def chat_stream(message: str, thread_id: str = "default"):
 
     async def gen():
         history = deps.session_store.load(thread_id)
+        query = _resolve_query(history, message)
+        resumed = [{"type": "ClarifyResumed", "query": query}] if query != message else []
         if deps.version != "v2":
             result = await run_v1(deps, message, thread_id, history)
             for ev in result["events"]:
@@ -167,17 +182,20 @@ async def chat_stream(message: str, thread_id: str = "default"):
         else:
             seen = 0
             final = ""
+            clarified = False
             last_prompt = None   # finalize까지 살아남은 최종 write/chat 호출의 실제 프롬프트
             # stream_mode를 리스트로 주면 (mode, payload) 튜플이 나온다 — "updates"는
             # 노드가 끝날 때마다의 상태 델타, "custom"은 write_node/chat_answer_node가
             # get_stream_writer()로 실행 중에 즉시 흘려보내는 토큰(AnswerToken) 이벤트다.
             async for mode, payload in app.state.graph.astream(
-                    {"query": message, "thread_id": thread_id, "history": history,
-                     "events": [], "cost_usd": 0.0}, stream_mode=["updates", "custom"]):
+                    {"query": query, "thread_id": thread_id, "history": history,
+                     "events": resumed, "cost_usd": 0.0}, stream_mode=["updates", "custom"]):
                 if mode == "custom":
                     yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
                     continue
                 for node_name, delta in payload.items():
+                    if node_name == "clarify": 
+                        clarified = True
                     for ev in (delta.get("events") or [])[seen:]:
                         ev = {**ev, "node": node_name}
                         yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
@@ -188,8 +206,7 @@ async def chat_stream(message: str, thread_id: str = "default"):
                     if delta.get("last_prompt"):
                         last_prompt = delta["last_prompt"]
             yield f"data: {json.dumps({'type': 'FinalAnswer', 'reply': final, 'prompt': last_prompt}, ensure_ascii=False)}\n\n"
-            deps.session_store.append(thread_id, "user", message)
-            deps.session_store.append(thread_id, "assistant", final)
+            _save_turn(deps, thread_id, message, final, clarified)
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(gen(), media_type="text/event-stream")
